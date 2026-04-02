@@ -42,17 +42,16 @@ jobs:
         unzip -q cmdline.zip
         rm -f cmdline.zip
         
-        # Show what we got
-        echo "=== Downloaded structure ==="
-        ls -la
-        ls -la cmdline-tools/
-        
-        # Rename cmdline-tools/latest to tools (buildozer expects tools/bin/sdkmanager)
-        mv cmdline-tools tools
+        # Structure: cmdline-tools/latest/bin/sdkmanager
+        # buildozer expects: tools/bin/sdkmanager
+        # Solution: move latest content to tools/
+        mkdir -p tools
+        mv cmdline-tools/latest/. tools/
+        rm -rf cmdline-tools
         
         echo "=== Final structure ==="
         ls -la tools/
-        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || echo "SDKMANAGER MISSING"
+        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || (echo "FAILED"; ls -la tools/bin/ 2>/dev/null)
         
         # Accept licenses
         mkdir -p $BUILDOZER_SDK/licenses
