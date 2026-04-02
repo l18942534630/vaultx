@@ -41,18 +41,22 @@ jobs:
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
         unzip -q cmdline.zip
         
-        # The zip extracts to cmdline-tools/latest/bin/sdkmanager
-        # We need tools/bin/sdkmanager
-        # Solution: rename cmdline-tools to tools, then move tools/ inside
-        mv cmdline-tools tools_temp
-        mkdir tools
-        mv tools_temp/latest/. tools/
-        rm -rf tools_temp cmdline.zip
+        # Show what we got
+        echo "=== Extracted structure ==="
+        ls -la
+        ls -la cmdline-tools/ 2>/dev/null || echo "No cmdline-tools dir"
         
-        echo "=== SDK Structure ==="
-        ls -la $SDK_ROOT/
-        ls -la $SDK_ROOT/tools/
-        ls -la $SDK_ROOT/tools/bin/ 2>/dev/null || echo "No bin dir"
+        # cmdline-tools contains: bin/, lib/, etc.
+        # buildozer expects: tools/bin/sdkmanager
+        # Solution: rename cmdline-tools to tools
+        mv cmdline-tools tools
+        
+        echo "=== Final structure ==="
+        ls -la tools/
+        ls -la tools/bin/
+        
+        # Clean up
+        rm -f cmdline.zip
     
     - name: Accept Android SDK licenses
       run: |
