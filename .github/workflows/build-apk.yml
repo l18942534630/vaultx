@@ -31,14 +31,26 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev
     
-    - name: Download and setup Android SDK command-line tools
+    - name: Download and setup Android SDK
       run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
-        cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk
+        
+        # Download cmdline-tools
+        cd $HOME/.buildozer/android/platform/android-sdk
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
         unzip -q commandlinetools-linux-11076708_latest.zip
-        mv cmdline-tools latest
-        rm commandlinetools-linux-11076708_latest.zip
+        
+        # Create tools/bin directory (buildozer expects this structure)
+        mkdir -p tools/bin
+        
+        # Copy cmdline-tools to tools/
+        cp -r cmdline-tools/latest/* tools/
+        
+        # Clean up
+        rm -rf cmdline-tools commandlinetools-linux-11076708_latest.zip
+        
+        # Verify
+        ls -la tools/bin/
     
     - name: Accept Android SDK licenses
       run: |
