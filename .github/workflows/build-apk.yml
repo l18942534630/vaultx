@@ -33,21 +33,54 @@ jobs:
     
     - name: Setup Android SDK
       run: |
-        # Use pre-installed Android SDK from GitHub Actions runner
-        echo "=== Using pre-installed Android SDK ==="
-        ls -la /usr/local/lib/android/sdk/
-        ls -la /usr/local/lib/android/sdk/ndk/
+        SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $SDK_ROOT
         
-        # Link to buildozer expected location
-        mkdir -p $HOME/.buildozer/android/platform
-        ln -sf /usr/local/lib/android/sdk $HOME/.buildozer/android/platform/android-sdk
-        ln -sf /usr/local/lib/android/sdk/ndk/27.3.13750724 $HOME/.buildozer/android/platform/android-ndk-r25b
+        # Link pre-installed SDK
+        ln -sf /usr/local/lib/android/sdk $SDK_ROOT
+        
+        echo "=== SDK structure ==="
+        ls -la $SDK_ROOT/
+        ls -la $SDK_ROOT/cmdline-tools/ 2>/dev/null || echo "No cmdline-tools"
+        ls -la $SDK_ROOT/tools/ 2>/dev/null || echo "No tools"
+        
+        # Find sdkmanager
+        echo "=== Finding sdkmanager ==="
+        find $SDK_ROOT -name "sdkmanager" 2>/dev/null | head -5
+        
+        # Create tools/bin if needed
+        mkdir -p $SDK_ROOT/tools/bin
+        
+        # If cmdline-tools/latest/bin/sdkmanager exists, copy to tools/bin
+        if [ -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
+          cp $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/
+          cp $SDK_ROOT/cmdline-tools/latest/bin/*.jar $SDK_ROOT/tools/bin/ 2>/dev/null || true
+          echo "Copied sdkmanager from cmdline-tools"
+        fi
+        
+        # Verify
+        if [ -f "$SDK_ROOT/tools/bin/sdkmanager" ]; then
+          echo "SUCCESS: sdkmanager at $SDK_ROOT/tools/bin/sdkmanager"
+        else
+          echo "WARNING: sdkmanager still missing"
+          find $SDK_ROOT -name "sdkmanager" 2>/dev/null
+        fi
+    
+    - name: Setup Android NDK
+      run: |
+        NDK_ROOT=$HOME/.buildozer/android/platform/android-ndk-r25b
+        mkdir -p $(dirname $NDK_ROOT)
+        ln -sf /usr/local/lib/android/sdk/ndk/27.3.13750724 $NDK_ROOT
+        echo "NDK linked: $NDK_ROOT"
+        ls -la $NDK_ROOT/ 2>/dev/null | head -5
     
     - name: Accept Android SDK licenses
       run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        printf "\n" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        mkdir -p $SDK_ROOT/licenses
+        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $SDK_ROOT/licenses/android-sdk-license
+        printf "\n" > $SDK_ROOT/licenses/android-sdk-preview-license
+        echo "Licenses accepted"
     
     - name: Install Python dependencies
       run: |
@@ -62,7 +95,6 @@ jobs:
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
-        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
       continue-on-error: true
     
     - name: List build output
