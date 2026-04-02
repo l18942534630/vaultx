@@ -41,30 +41,20 @@ jobs:
         if [ -f "$BUILDOZER_SDK/tools/bin/sdkmanager" ]; then
           echo "SDK already configured"
         else
-          echo "Setting up SDK..."
-          # Download and extract
           wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
           unzip -q cmdline.zip
           rm -f cmdline.zip
           
-          # Determine structure
+          # Build tools/ structure
+          mkdir -p tools/bin tools/lib
           if [ -d "cmdline-tools/latest" ]; then
-            mkdir -p tools
-            cp -r cmdline-tools/latest/bin tools/
-            cp -r cmdline-tools/latest/lib tools/ 2>/dev/null || true
-            cp -r cmdline-tools/latest/source.tools tools/ 2>/dev/null || true
-            rm -rf cmdline-tools
-          elif [ -d "cmdline-tools" ]; then
-            mkdir -p tools
-            find cmdline-tools -type f -name "*.jar" -exec cp {} tools/ \; 2>/dev/null || true
-            find cmdline-tools -type d -name "bin" -exec cp -r {} tools/ \; 2>/dev/null || true
+            cp -r cmdline-tools/latest/bin/* tools/bin/ 2>/dev/null || true
+            cp -r cmdline-tools/latest/lib/* tools/lib/ 2>/dev/null || true
             rm -rf cmdline-tools
           fi
         fi
         
-        echo "=== SDK Status ==="
-        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || echo "SDKMANAGER MISSING"
-        ls -la tools/lib/*.jar 2>/dev/null | wc -l | xargs echo "JAR files:"
+        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDK OK" || echo "SDK MISSING"
         
         # Accept licenses
         mkdir -p $BUILDOZER_SDK/licenses
@@ -80,18 +70,29 @@ jobs:
             cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 $NDK_TARGET
           fi
         fi
-        echo "NDK ready: $(ls $NDK_TARGET 2>/dev/null | head -1)"
+        echo "NDK ready"
     
     - name: Accept SDK licenses and install build-tools
       run: |
         SDK=$HOME/.buildozer/android/platform/android-sdk
         export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
-        
         if [ -f "$SDK/tools/bin/sdkmanager" ]; then
           yes | $SDK/tools/bin/sdkmanager --licenses 2>/dev/null || true
           $SDK/tools/bin/sdkmanager "build-tools;34.0.0" 2>/dev/null || true
-          $SDK/tools/bin/sdkmanager "platforms;android-34" 2>/dev/null || true
         fi
+    
+    - name: Install older autoconf (for libffi compatibility)
+      run: |
+        # Install autoconf 2.69 which is compatible with libffi's configure.ac
+        wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz -O /tmp/autoconf.tar.gz
+        cd /tmp
+        tar -xzf autoconf.tar.gz
+        cd autoconf-2.69
+        ./configure --prefix=/tmp/autoconf-install 2>&1 | tail -5
+        make -j4 2>&1 | tail -5
+        make install 2>&1 | tail -3
+        echo "=== Autoconf 2.69 installed ==="
+        /tmp/autoconf-install/bin/autoconf --version
     
     - name: Install Python dependencies
       run: |
@@ -103,6 +104,12 @@ jobs:
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         export ANDROID_HOME=$ANDROID_SDK_ROOT
         export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
+        
+        # Use older autoconf for libffi compatibility
+        export PATH=/tmp/autoconf-install/bin:$PATH
+        export AUTOCONF=/tmp/autoconf-install/bin/autoconf
+        export LIBTOOL=/tmp/autoconf-install/bin/libtool
+        export AUTORECONF=/tmp/autoconf-install/bin/autoreconf
         
         cd android
         buildozer android debug
