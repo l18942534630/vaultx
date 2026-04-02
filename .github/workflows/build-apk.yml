@@ -26,17 +26,42 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install Android SDK
+    - name: Install Android SDK via action
       uses: android-actions/setup-android@v3
       with:
         sdk-root: ${{ runner.temp }}/android-sdk
     
+    - name: Link SDK to buildozer path
+      run: |
+        # buildozer uses $HOME/.buildozer/android/platform/android-sdk
+        # create symlink from action's SDK to buildozer's expected path
+        mkdir -p $HOME/.buildozer/android/platform
+        rm -rf $HOME/.buildozer/android/platform/android-sdk
+        ln -sf ${{ runner.temp }}/android-sdk $HOME/.buildozer/android/platform/android-sdk
+        echo "SDK linked to buildozer path"
+        ls -la $HOME/.buildozer/android/platform/android-sdk/
+    
     - name: Accept SDK licenses
       run: |
-        mkdir -p ${{ runner.temp }}/android-sdk/licenses
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > ${{ runner.temp }}/android-sdk/licenses/android-sdk-license
-        echo -e "\n" > ${{ runner.temp }}/android-sdk/licenses/android-sdk-preview-license
-        echo "Licenses accepted"
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo -e "\n" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+    
+    - name: Install build-tools
+      run: |
+        SDK=$HOME/.buildozer/android/platform/android-sdk
+        # Find sdkmanager
+        SDKMANAGER=$(find $SDK -name "sdkmanager" -type f 2>/dev/null | head -1)
+        if [ -n "$SDKMANAGER" ]; then
+          echo "Found sdkmanager: $SDKMANAGER"
+          export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+          yes | $SDKMANAGER --licenses 2>/dev/null || true
+          $SDKMANAGER "build-tools;34.0.0" 2>/dev/null || true
+          echo "=== Installed packages ==="
+          $SDKMANAGER --list_installed 2>/dev/null | grep build-tools
+        else
+          echo "ERROR: sdkmanager not found"
+        fi
     
     - name: Install Python dependencies
       run: |
@@ -45,16 +70,16 @@ jobs:
     
     - name: Build APK with Buildozer
       run: |
-        export ANDROID_SDK_ROOT=${{ runner.temp }}/android-sdk
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         export ANDROID_HOME=$ANDROID_SDK_ROOT
-        export ANDROID_NDK_HOME=${{ runner.temp }}/android-sdk/ndk/25b
+        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-25b
         
         cd android
         buildozer android debug
       env:
-        ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
-        ANDROID_HOME: ${{ runner.temp }}/android-sdk
-        ANDROID_NDK_HOME: ${{ runner.temp }}/android-sdk/ndk/25b
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-25b
       continue-on-error: true
     
     - name: List build output
