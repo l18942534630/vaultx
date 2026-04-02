@@ -31,40 +31,67 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev automake libtool
     
-    - name: Setup Android SDK and NDK
+    - name: Setup Android SDK
       run: |
-        SDK_ROOT=/usr/local/lib/android/sdk
+        # Buildozer uses $HOME/.buildozer/android/platform/android-sdk
+        BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
         
-        # Accept all licenses
-        mkdir -p $SDK_ROOT/licenses
-        mkdir -p $SDK_ROOT/licenses_opt
+        # Create directory
+        mkdir -p $BUILDOZER_SDK
         
-        # Write all known Android SDK license keys
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $SDK_ROOT/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" >> $SDK_ROOT/licenses/android-sdk-license
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $SDK_ROOT/licenses/android-sdk-license
-        echo "d975f751698a77b662f1254ddbeed3901e976f5a" >> $SDK_ROOT/licenses/android-sdk-license
-        echo "8933bad161af4178b1185d1a37fbf41ea5269c55" >> $SDK_ROOT/licenses/android-sdk-license
-        echo -e "\n" > $SDK_ROOT/licenses/android-sdk-preview-license
-        
-        # Create tools/bin for buildozer
-        mkdir -p $SDK_ROOT/tools/bin
-        if [ -f "$SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" ]; then
-          cp $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager $SDK_ROOT/tools/bin/
-          cp $SDK_ROOT/cmdline-tools/latest/bin/*.jar $SDK_ROOT/tools/bin/ 2>/dev/null || true
+        # Copy from system SDK
+        if [ -d /usr/local/lib/android/sdk ]; then
+          echo "Copying from system SDK..."
+          cp -r /usr/local/lib/android/sdk/. $BUILDOZER_SDK/ 2>/dev/null || true
         fi
         
-        echo "=== License files ==="
-        ls -la $SDK_ROOT/licenses/
-        cat $SDK_ROOT/licenses/android-sdk-license
+        # Create tools/bin structure (buildozer checks tools/bin/sdkmanager)
+        mkdir -p $BUILDOZER_SDK/tools/bin
         
-        # Install build-tools using sdkmanager
-        echo "=== Installing build-tools ==="
-        yes | $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --licenses 2>/dev/null || true
-        $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager "build-tools;34.0.0" || true
+        # Find and copy sdkmanager
+        if [ -f "$BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager" ]; then
+          cp $BUILDOZER_SDK/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/
+          cp $BUILDOZER_SDK/cmdline-tools/latest/bin/*.jar $BUILDOZER_SDK/tools/bin/ 2>/dev/null || true
+          echo "Copied sdkmanager from cmdline-tools"
+        elif [ -f "/usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager" ]; then
+          cp /usr/local/lib/android/sdk/cmdline-tools/latest/bin/sdkmanager $BUILDOZER_SDK/tools/bin/
+          cp /usr/local/lib/android/sdk/cmdline-tools/latest/bin/*.jar $BUILDOZER_SDK/tools/bin/ 2>/dev/null || true
+          echo "Copied sdkmanager from system SDK"
+        fi
         
-        echo "=== Installed packages ==="
-        $SDK_ROOT/cmdline-tools/latest/bin/sdkmanager --list_installed 2>/dev/null | head -20
+        # Accept licenses
+        mkdir -p $BUILDOZER_SDK/licenses
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $BUILDOZER_SDK/licenses/android-sdk-license
+        echo -e "\n" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
+        
+        # Verify
+        echo "=== Final structure ==="
+        ls -la $BUILDOZER_SDK/tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || echo "SDKMANAGER MISSING"
+        ls -la $BUILDOZER_SDK/licenses/ 2>/dev/null
+        
+    - name: Setup Android NDK
+      run: |
+        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r25b
+        mkdir -p $(dirname $NDK_TARGET)
+        
+        # Copy from system NDK
+        if [ -d /usr/local/lib/android/sdk/ndk/27.3.13750724 ]; then
+          cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 $HOME/.buildozer/android/platform/android-ndk-r25b
+          echo "NDK copied"
+        fi
+        ls -la $NDK_TARGET/ 2>/dev/null | head -3
+    
+    - name: Accept SDK licenses via sdkmanager
+      run: |
+        SDK=$HOME/.buildozer/android/platform/android-sdk
+        if [ -f "$SDK/tools/bin/sdkmanager" ]; then
+          yes | $SDK/tools/bin/sdkmanager --licenses 2>/dev/null || true
+          $SDK/tools/bin/sdkmanager "build-tools;34.0.0" 2>/dev/null || true
+          echo "Licenses accepted and build-tools installed"
+        else
+          echo "sdkmanager not found at $SDK/tools/bin/sdkmanager"
+          find $SDK -name "sdkmanager" 2>/dev/null
+        fi
     
     - name: Install Python dependencies
       run: |
@@ -73,16 +100,16 @@ jobs:
     
     - name: Build APK with Buildozer
       run: |
-        export ANDROID_SDK_ROOT=/usr/local/lib/android/sdk
+        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         export ANDROID_HOME=$ANDROID_SDK_ROOT
-        export ANDROID_NDK_HOME=/usr/local/lib/android/sdk/ndk/27.3.13750724
+        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
         
         cd android
         buildozer android debug
       env:
-        ANDROID_SDK_ROOT: /usr/local/lib/android/sdk
-        ANDROID_HOME: /usr/local/lib/android/sdk
-        ANDROID_NDK_HOME: /usr/local/lib/android/sdk/ndk/27.3.13750724
+        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
       continue-on-error: true
     
     - name: List build output
