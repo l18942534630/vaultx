@@ -37,21 +37,34 @@ jobs:
         mkdir -p $BUILDOZER_SDK
         cd $BUILDOZER_SDK
         
-        # Download cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-        unzip -q cmdline.zip
-        rm -f cmdline.zip
+        # Check if already set up
+        if [ -f "$BUILDOZER_SDK/tools/bin/sdkmanager" ]; then
+          echo "SDK already configured"
+        else
+          echo "Setting up SDK..."
+          # Download and extract
+          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
+          unzip -q cmdline.zip
+          rm -f cmdline.zip
+          
+          # Determine structure
+          if [ -d "cmdline-tools/latest" ]; then
+            mkdir -p tools
+            cp -r cmdline-tools/latest/bin tools/
+            cp -r cmdline-tools/latest/lib tools/ 2>/dev/null || true
+            cp -r cmdline-tools/latest/source.tools tools/ 2>/dev/null || true
+            rm -rf cmdline-tools
+          elif [ -d "cmdline-tools" ]; then
+            mkdir -p tools
+            find cmdline-tools -type f -name "*.jar" -exec cp {} tools/ \; 2>/dev/null || true
+            find cmdline-tools -type d -name "bin" -exec cp -r {} tools/ \; 2>/dev/null || true
+            rm -rf cmdline-tools
+          fi
+        fi
         
-        # Structure: cmdline-tools/latest/bin/sdkmanager
-        # buildozer expects: tools/bin/sdkmanager
-        # Solution: move latest content to tools/
-        mkdir -p tools
-        mv cmdline-tools/latest/. tools/
-        rm -rf cmdline-tools
-        
-        echo "=== Final structure ==="
-        ls -la tools/
-        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || (echo "FAILED"; ls -la tools/bin/ 2>/dev/null)
+        echo "=== SDK Status ==="
+        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || echo "SDKMANAGER MISSING"
+        ls -la tools/lib/*.jar 2>/dev/null | wc -l | xargs echo "JAR files:"
         
         # Accept licenses
         mkdir -p $BUILDOZER_SDK/licenses
@@ -67,20 +80,18 @@ jobs:
             cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 $NDK_TARGET
           fi
         fi
-        echo "NDK ready"
-        ls $NDK_TARGET 2>/dev/null | head -3
+        echo "NDK ready: $(ls $NDK_TARGET 2>/dev/null | head -1)"
     
     - name: Accept SDK licenses and install build-tools
       run: |
         SDK=$HOME/.buildozer/android/platform/android-sdk
         export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
         
-        yes | $SDK/tools/bin/sdkmanager --licenses 2>/dev/null || true
-        $SDK/tools/bin/sdkmanager "build-tools;34.0.0" 2>/dev/null || true
-        $SDK/tools/bin/sdkmanager "platforms;android-34" 2>/dev/null || true
-        
-        echo "=== Installed packages ==="
-        $SDK/tools/bin/sdkmanager --list_installed 2>/dev/null | grep -E "(build-tools|platforms)" | head -10
+        if [ -f "$SDK/tools/bin/sdkmanager" ]; then
+          yes | $SDK/tools/bin/sdkmanager --licenses 2>/dev/null || true
+          $SDK/tools/bin/sdkmanager "build-tools;34.0.0" 2>/dev/null || true
+          $SDK/tools/bin/sdkmanager "platforms;android-34" 2>/dev/null || true
+        fi
     
     - name: Install Python dependencies
       run: |
