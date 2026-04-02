@@ -26,73 +26,17 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install system dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev automake libtool
+    - name: Install Android SDK
+      uses: android-actions/setup-android@v3
+      with:
+        sdk-root: ${{ runner.temp }}/android-sdk
     
-    - name: Setup Android SDK
+    - name: Accept SDK licenses
       run: |
-        BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
-        mkdir -p $BUILDOZER_SDK
-        cd $BUILDOZER_SDK
-        
-        # Check if already set up
-        if [ -f "$BUILDOZER_SDK/tools/bin/sdkmanager" ]; then
-          echo "SDK already configured"
-        else
-          wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-          unzip -q cmdline.zip
-          rm -f cmdline.zip
-          
-          # Build tools/ structure
-          mkdir -p tools/bin tools/lib
-          if [ -d "cmdline-tools/latest" ]; then
-            cp -r cmdline-tools/latest/bin/* tools/bin/ 2>/dev/null || true
-            cp -r cmdline-tools/latest/lib/* tools/lib/ 2>/dev/null || true
-            rm -rf cmdline-tools
-          fi
-        fi
-        
-        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDK OK" || echo "SDK MISSING"
-        
-        # Accept licenses
-        mkdir -p $BUILDOZER_SDK/licenses
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $BUILDOZER_SDK/licenses/android-sdk-license
-        echo -e "\n" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
-    
-    - name: Setup Android NDK
-      run: |
-        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r25b
-        mkdir -p $(dirname $NDK_TARGET)
-        if [ ! -d "$NDK_TARGET" ]; then
-          if [ -d /usr/local/lib/android/sdk/ndk/27.3.13750724 ]; then
-            cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 $NDK_TARGET
-          fi
-        fi
-        echo "NDK ready"
-    
-    - name: Accept SDK licenses and install build-tools
-      run: |
-        SDK=$HOME/.buildozer/android/platform/android-sdk
-        export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
-        if [ -f "$SDK/tools/bin/sdkmanager" ]; then
-          yes | $SDK/tools/bin/sdkmanager --licenses 2>/dev/null || true
-          $SDK/tools/bin/sdkmanager "build-tools;34.0.0" 2>/dev/null || true
-        fi
-    
-    - name: Install older autoconf (for libffi compatibility)
-      run: |
-        # Install autoconf 2.69 which is compatible with libffi's configure.ac
-        wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz -O /tmp/autoconf.tar.gz
-        cd /tmp
-        tar -xzf autoconf.tar.gz
-        cd autoconf-2.69
-        ./configure --prefix=/tmp/autoconf-install 2>&1 | tail -5
-        make -j4 2>&1 | tail -5
-        make install 2>&1 | tail -3
-        echo "=== Autoconf 2.69 installed ==="
-        /tmp/autoconf-install/bin/autoconf --version
+        mkdir -p ${{ runner.temp }}/android-sdk/licenses
+        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > ${{ runner.temp }}/android-sdk/licenses/android-sdk-license
+        echo -e "\n" > ${{ runner.temp }}/android-sdk/licenses/android-sdk-preview-license
+        echo "Licenses accepted"
     
     - name: Install Python dependencies
       run: |
@@ -101,22 +45,16 @@ jobs:
     
     - name: Build APK with Buildozer
       run: |
-        export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
+        export ANDROID_SDK_ROOT=${{ runner.temp }}/android-sdk
         export ANDROID_HOME=$ANDROID_SDK_ROOT
-        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
-        
-        # Use older autoconf for libffi compatibility
-        export PATH=/tmp/autoconf-install/bin:$PATH
-        export AUTOCONF=/tmp/autoconf-install/bin/autoconf
-        export LIBTOOL=/tmp/autoconf-install/bin/libtool
-        export AUTORECONF=/tmp/autoconf-install/bin/autoreconf
+        export ANDROID_NDK_HOME=${{ runner.temp }}/android-sdk/ndk/25b
         
         cd android
         buildozer android debug
       env:
-        ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_SDK_ROOT: ${{ runner.temp }}/android-sdk
+        ANDROID_HOME: ${{ runner.temp }}/android-sdk
+        ANDROID_NDK_HOME: ${{ runner.temp }}/android-sdk/ndk/25b
       continue-on-error: true
     
     - name: List build output
