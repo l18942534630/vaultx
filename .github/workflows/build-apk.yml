@@ -35,33 +35,29 @@ jobs:
       run: |
         BUILDOZER_SDK=$HOME/.buildozer/android/platform/android-sdk
         mkdir -p $BUILDOZER_SDK
-        
-        # Download fresh cmdline-tools
         cd $BUILDOZER_SDK
+        
+        # Download cmdline-tools
         wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
         unzip -q cmdline.zip
+        rm -f cmdline.zip
         
-        # Create tools/bin structure
-        mkdir -p $BUILDOZER_SDK/tools/bin
-        mkdir -p $BUILDOZER_SDK/tools/lib
+        # Show what we got
+        echo "=== Downloaded structure ==="
+        ls -la
+        ls -la cmdline-tools/
         
-        # Copy entire cmdline-tools/latest to tools/
-        cp -r cmdline-tools/latest/bin/* $BUILDOZER_SDK/tools/bin/
-        cp -r cmdline-tools/latest/lib/* $BUILDOZER_SDK/tools/lib/
+        # Rename cmdline-tools/latest to tools (buildozer expects tools/bin/sdkmanager)
+        mv cmdline-tools tools
+        
+        echo "=== Final structure ==="
+        ls -la tools/
+        ls -la tools/bin/sdkmanager 2>/dev/null && echo "SDKMANAGER OK" || echo "SDKMANAGER MISSING"
         
         # Accept licenses
         mkdir -p $BUILDOZER_SDK/licenses
         echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $BUILDOZER_SDK/licenses/android-sdk-license
         echo -e "\n" > $BUILDOZER_SDK/licenses/android-sdk-preview-license
-        
-        # Clean up
-        rm -rf cmdline-tools cmdline.zip
-        
-        # Verify
-        echo "=== Verification ==="
-        ls -la $BUILDOZER_SDK/tools/bin/sdkmanager
-        ls -la $BUILDOZER_SDK/tools/lib/*.jar | head -5
-        echo "Count: $(ls $BUILDOZER_SDK/tools/lib/*.jar 2>/dev/null | wc -l) JAR files"
     
     - name: Setup Android NDK
       run: |
@@ -72,7 +68,7 @@ jobs:
             cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 $NDK_TARGET
           fi
         fi
-        echo "NDK ready: $NDK_TARGET"
+        echo "NDK ready"
         ls $NDK_TARGET 2>/dev/null | head -3
     
     - name: Accept SDK licenses and install build-tools
