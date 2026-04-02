@@ -31,27 +31,20 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev
     
+    - name: Download and setup Android SDK command-line tools
+      run: |
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+        cd $HOME/.buildozer/android/platform/android-sdk/cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
+        unzip -q commandlinetools-linux-11076708_latest.zip
+        mv cmdline-tools latest
+        rm commandlinetools-linux-11076708_latest.zip
+    
     - name: Accept Android SDK licenses
       run: |
-        mkdir -p $HOME/.android
-        touch $HOME/.android/repositories.cfg
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.android/debug.keystore
-        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.android/debug.keystore
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk-license
-        echo "d975f751698a77b662f1254ddbeed3901e976f5a" >> $HOME/android-sdk-license
-        echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" >> $HOME/android-sdk-license
-        echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk-license
-        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/android-sdk-license
-        echo -e "\n" > $HOME/android-sdk-preview-license
-        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
-        export ANDROID_SDK_ROOT=$ANDROID_HOME
-    
-    - name: Create Android SDK directory
-      run: |
         mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo "84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo "" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
+        printf "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        printf "\n" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
     
     - name: Install Python dependencies
       run: |
