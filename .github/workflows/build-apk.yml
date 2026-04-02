@@ -7,9 +7,6 @@ on:
     branches: [ main, master ]
   workflow_dispatch:
 
-env:
-  ANDROID_ACCEPT_SDK_LICENSES: yes
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -32,7 +29,29 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev libffi-dev autoconf libtool pkg-config libncurses5-dev cmake automake wget lzip
+        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev
+    
+    - name: Accept Android SDK licenses
+      run: |
+        mkdir -p $HOME/.android
+        touch $HOME/.android/repositories.cfg
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.android/debug.keystore
+        echo "d56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/.android/debug.keystore
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" > $HOME/android-sdk-license
+        echo "d975f751698a77b662f1254ddbeed3901e976f5a" >> $HOME/android-sdk-license
+        echo -e "\n8933bad161af4178b1185d1a37fbf41ea5269c55" >> $HOME/android-sdk-license
+        echo -e "\nd56f5187479451eabf01fb78af6dfcb131a6481e" >> $HOME/android-sdk-license
+        echo -e "\n84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/android-sdk-license
+        echo -e "\n" > $HOME/android-sdk-preview-license
+        export ANDROID_HOME=$HOME/.buildozer/android/platform/android-sdk
+        export ANDROID_SDK_ROOT=$ANDROID_HOME
+    
+    - name: Create Android SDK directory
+      run: |
+        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
+        echo "24333f8a63b6825ea9c5514f83c2829b004d1fee" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "84831b9409646a918e30573bab4c9c91346d8abd" >> $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
+        echo "" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
     
     - name: Install Python dependencies
       run: |
@@ -45,6 +64,7 @@ jobs:
         buildozer android debug
       env:
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
       continue-on-error: true
     
     - name: List build output
@@ -62,16 +82,3 @@ jobs:
         path: android/bin/*.apk
         retention-days: 30
         if-no-files-found: warn
-    
-    - name: Build summary
-      if: always()
-      run: |
-        echo "## Build Summary" >> $GITHUB_STEP_SUMMARY
-        echo "" >> $GITHUB_STEP_SUMMARY
-        if ls android/bin/*.apk 2>/dev/null; then
-          echo "✅ APK built successfully!" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          ls -lh android/bin/*.apk >> $GITHUB_STEP_SUMMARY
-        else
-          echo "⚠️ Check the logs above for build status" >> $GITHUB_STEP_SUMMARY
-        fi
