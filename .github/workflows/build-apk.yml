@@ -29,34 +29,19 @@ jobs:
     - name: Install system dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev
+        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev automake libtool
     
-    - name: Download and setup Android SDK
+    - name: Setup Android SDK
       run: |
-        SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
-        mkdir -p $SDK_ROOT
-        cd $SDK_ROOT
+        # Use pre-installed Android SDK from GitHub Actions runner
+        echo "=== Using pre-installed Android SDK ==="
+        ls -la /usr/local/lib/android/sdk/
+        ls -la /usr/local/lib/android/sdk/ndk/
         
-        # Download cmdline-tools
-        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O cmdline.zip
-        unzip -q cmdline.zip
-        
-        # Show what we got
-        echo "=== Extracted structure ==="
-        ls -la
-        ls -la cmdline-tools/ 2>/dev/null || echo "No cmdline-tools dir"
-        
-        # cmdline-tools contains: bin/, lib/, etc.
-        # buildozer expects: tools/bin/sdkmanager
-        # Solution: rename cmdline-tools to tools
-        mv cmdline-tools tools
-        
-        echo "=== Final structure ==="
-        ls -la tools/
-        ls -la tools/bin/
-        
-        # Clean up
-        rm -f cmdline.zip
+        # Link to buildozer expected location
+        mkdir -p $HOME/.buildozer/android/platform
+        ln -sf /usr/local/lib/android/sdk $HOME/.buildozer/android/platform/android-sdk
+        ln -sf /usr/local/lib/android/sdk/ndk/27.3.13750724 $HOME/.buildozer/android/platform/android-ndk-r25b
     
     - name: Accept Android SDK licenses
       run: |
@@ -76,6 +61,8 @@ jobs:
       env:
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
+        ANDROID_NDK_ROOT: /home/runner/.buildozer/android/platform/android-ndk-r25b
       continue-on-error: true
     
     - name: List build output
