@@ -26,42 +26,115 @@ jobs:
       with:
         python-version: '3.11'
     
-    - name: Install Android SDK via action
-      uses: android-actions/setup-android@v3
-      with:
-        sdk-root: ${{ runner.temp }}/android-sdk
-    
-    - name: Link SDK to buildozer path
+    - name: Install system dependencies
       run: |
-        # buildozer uses $HOME/.buildozer/android/platform/android-sdk
-        # create symlink from action's SDK to buildozer's expected path
-        mkdir -p $HOME/.buildozer/android/platform
-        rm -rf $HOME/.buildozer/android/platform/android-sdk
-        ln -sf ${{ runner.temp }}/android-sdk $HOME/.buildozer/android/platform/android-sdk
-        echo "SDK linked to buildozer path"
-        ls -la $HOME/.buildozer/android/platform/android-sdk/
+        sudo apt-get update
+        sudo apt-get install -y git zip unzip openjdk-17-jdk zlib1g-dev libssl-dev automake libtool
     
-    - name: Accept SDK licenses
-      run: |
-        mkdir -p $HOME/.buildozer/android/platform/android-sdk/licenses
-        echo -e "\n24333f8a63b6825ea9c5514f83c2829b004d1fee\n84831b9409646a918e30573bab4c9c91346d8abd\nd56f5187479451eabf01fb78af6dfcb131a6481e\nd975f751698a77b662f1254ddbeed3901e976f5a\n8933bad161af4178b1185d1a37fbf41ea5269c55" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-license
-        echo -e "\n" > $HOME/.buildozer/android/platform/android-sdk/licenses/android-sdk-preview-license
-    
-    - name: Install build-tools
+    # ===== 关键：正确设置 Android SDK =====
+    # buildozer 硬编码检查 $HOME/.buildozer/android/platform/android-sdk/tools/bin/sdkmanager
+    # 必须在这个路径下准备好 tools/bin/sdkmanager + tools/lib/*.jar
+    - name: Setup Android SDK for buildozer
       run: |
         SDK=$HOME/.buildozer/android/platform/android-sdk
-        # Find sdkmanager
-        SDKMANAGER=$(find $SDK -name "sdkmanager" -type f 2>/dev/null | head -1)
-        if [ -n "$SDKMANAGER" ]; then
-          echo "Found sdkmanager: $SDKMANAGER"
-          export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
-          yes | $SDKMANAGER --licenses 2>/dev/null || true
-          $SDKMANAGER "build-tools;34.0.0" 2>/dev/null || true
-          echo "=== Installed packages ==="
-          $SDKMANAGER --list_installed 2>/dev/null | grep build-tools
-        else
-          echo "ERROR: sdkmanager not found"
+        mkdir -p $SDK
+        cd $SDK
+        
+        # 下载 cmdline-tools
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip -O ct.zip
+        unzip -q ct.zip
+        
+        # 动态找到 sdkmanager 位置（不假设目录结构）
+        SDKMANAGER_SRC=$(find . -name "sdkmanager" -type f | head -1)
+        echo "sdkmanager found at: $SDKMANAGER_SRC"
+        
+        if [ -z "$SDKMANAGER_SRC" ]; then
+          echo "FATAL: sdkmanager not found in zip"
+          ls -laR . | head -30
+          exit 1
         fi
+        
+        # 创建 tools/bin 和 tools/lib
+        mkdir -p tools/bin tools/lib
+        
+        # 复制 sdkmanager 可执行文件
+        cp "$SDKMANAGER_SRC" tools/bin/
+        chmod +x tools/bin/sdkmanager
+        
+        # 复制所有 jar 文件（sdkmanager 运行需要）
+        BIN_DIR=$(dirname "$SDKMANAGER_SRC")
+        PARENT_DIR=$(dirname "$BIN_DIR")
+        if [ -d "$PARENT_DIR/lib" ]; then
+          cp "$PARENT_DIR"/lib/*.jar tools/lib/
+          echo "Copied $(ls tools/lib/*.jar | wc -l) jar files"
+        fi
+        
+        # 清理
+        rm -rf cmdline-tools ct.zip
+        
+        # 验证
+        echo "=== Verification ==="
+        test -f tools/bin/sdkmanager && echo "tools/bin/sdkmanager OK" || echo "FAIL"
+        test "$(ls tools/lib/*.jar 2>/dev/null | wc -l)" -gt 0 && echo "JAR files OK" || echo "NO JARS"
+        
+        # 写入许可证文件（5个hash值，每行一个）
+        mkdir -p licenses
+        printf '%s\n' \
+          "24333f8a63b6825ea9c5514f83c2829b004d1fee" \
+          "84831b9409646a918e30573bab4c9c91346d8abd" \
+          "d56f5187479451eabf01fb78af6dfcb131a6481e" \
+          "d975f751698a77b662f1254ddbeed3901e976f5a" \
+          "8933bad161af4178b1185d1a37fbf41ea5269c55" > licenses/android-sdk-license
+        printf '\n' > licenses/android-sdk-preview-license
+        echo "License files written"
+        
+        # 用 sdkmanager 预装 build-tools 和 platforms
+        export JAVA_HOME=/opt/hostedtoolcache/Java_Temurin-Hotspot_jdk/17.0.18-8/x64
+        
+        # 先接受许可证（用 heredoc 比 yes | 更可靠）
+        tools/bin/sdkmanager --licenses <<< "y
+y
+y
+y
+y
+y
+y
+y" 2>/dev/null || true
+        
+        # 安装 build-tools 和 platforms
+        tools/bin/sdkmanager "build-tools;34.0.0" 2>&1 | tail -3
+        tools/bin/sdkmanager "platforms;android-34" 2>&1 | tail -3
+        
+        echo "=== Final check ==="
+        test -d build-tools && echo "build-tools OK" || echo "build-tools MISSING"
+        test -d platforms && echo "platforms OK" || echo "platforms MISSING"
+    
+    # ===== 设置 NDK =====
+    - name: Setup Android NDK
+      run: |
+        NDK_TARGET=$HOME/.buildozer/android/platform/android-ndk-r25b
+        mkdir -p $(dirname $NDK_TARGET)
+        if [ ! -d "$NDK_TARGET" ] && [ -d /usr/local/lib/android/sdk/ndk/27.3.13750724 ]; then
+          cp -r /usr/local/lib/android/sdk/ndk/27.3.13750724 "$NDK_TARGET"
+          echo "NDK copied from system"
+        elif [ -d "$NDK_TARGET" ]; then
+          echo "NDK already exists"
+        else
+          echo "WARNING: NDK not found, buildozer will download it"
+        fi
+    
+    # ===== 安装 autoconf 2.69（解决 libffi 编译问题）=====
+    - name: Install autoconf 2.69
+      run: |
+        cd /tmp
+        wget -q https://ftp.gnu.org/gnu/autoconf/autoconf-2.69.tar.gz
+        tar -xzf autoconf-2.69.tar.gz
+        cd autoconf-2.69
+        ./configure --prefix=/usr/local 2>&1 | tail -3
+        make -j$(nproc) 2>&1 | tail -3
+        sudo make install 2>&1 | tail -3
+        autoconf --version
+        autoreconf --version
     
     - name: Install Python dependencies
       run: |
@@ -72,14 +145,17 @@ jobs:
       run: |
         export ANDROID_SDK_ROOT=$HOME/.buildozer/android/platform/android-sdk
         export ANDROID_HOME=$ANDROID_SDK_ROOT
-        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-25b
+        export ANDROID_NDK_HOME=$HOME/.buildozer/android/platform/android-ndk-r25b
+        
+        # 使用 autoconf 2.69
+        export PATH=/usr/local/bin:$PATH
         
         cd android
         buildozer android debug
       env:
         ANDROID_SDK_ROOT: /home/runner/.buildozer/android/platform/android-sdk
         ANDROID_HOME: /home/runner/.buildozer/android/platform/android-sdk
-        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-25b
+        ANDROID_NDK_HOME: /home/runner/.buildozer/android/platform/android-ndk-r25b
       continue-on-error: true
     
     - name: List build output
